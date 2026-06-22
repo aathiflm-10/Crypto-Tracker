@@ -479,6 +479,40 @@ function updateLiveDetailPrice(price, pct) {
     lastPrice = price;
 }
 
+// Helper to construct vertical color gradients for the line stroke and filled area relative to a baseline price
+function getChartGradients(chart, baselinePrice) {
+    const { ctx, chartArea } = chart;
+    if (!chartArea) return null;
+    
+    const yAxis = chart.scales.y;
+    const baselinePixel = yAxis.getPixelForValue(baselinePrice);
+    const topPixel = chartArea.top;
+    const bottomPixel = chartArea.bottom;
+    const chartHeight = bottomPixel - topPixel;
+    
+    if (chartHeight <= 0) return null;
+    
+    // Calculate stop percentage (0 = top of chart, 1 = bottom of chart)
+    let stop = (baselinePixel - topPixel) / chartHeight;
+    stop = Math.max(0, Math.min(1, stop)); // Clamp between 0 and 1
+    
+    // Line stroke gradient: green above baseline, red below baseline
+    const lineGrad = ctx.createLinearGradient(0, topPixel, 0, bottomPixel);
+    lineGrad.addColorStop(0, '#16c784'); // Emerald Green
+    lineGrad.addColorStop(stop, '#16c784');
+    lineGrad.addColorStop(stop, '#ea3943'); // Crimson Red
+    lineGrad.addColorStop(1, '#ea3943');
+    
+    // Filled area gradient: green fade above baseline, red fade below baseline
+    const fillGrad = ctx.createLinearGradient(0, topPixel, 0, bottomPixel);
+    fillGrad.addColorStop(0, 'rgba(22, 199, 132, 0.18)');
+    fillGrad.addColorStop(stop, 'rgba(22, 199, 132, 0.002)');
+    fillGrad.addColorStop(stop, 'rgba(234, 57, 67, 0.002)');
+    fillGrad.addColorStop(1, 'rgba(234, 57, 67, 0.18)');
+    
+    return { line: lineGrad, fill: fillGrad };
+}
+
 function renderMainChart(chartPoints) {
     const ctx = document.getElementById('priceChart').getContext('2d');
     
@@ -492,10 +526,78 @@ function renderMainChart(chartPoints) {
     });
     
     const prices = chartPoints.map(p => p.price);
+    const baselinePrice = prices[0] || 0;
     
     if (mainChart) {
         mainChart.destroy();
     }
+    
+    // Custom plugin to draw the horizontal dotted baseline and highlighted price pills
+    const baselinePlugin = {
+        id: 'baselinePlugin',
+        afterDraw: (chart) => {
+            const { ctx, chartArea } = chart;
+            if (!chartArea) return;
+            
+            const yAxis = chart.scales.y;
+            const yPixel = yAxis.getPixelForValue(baselinePrice);
+            
+            ctx.save();
+            
+            // 1. Draw horizontal dotted baseline
+            ctx.beginPath();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = 'rgba(139, 148, 158, 0.35)';
+            ctx.lineWidth = 1;
+            ctx.moveTo(chartArea.left, yPixel);
+            ctx.lineTo(chartArea.right, yPixel);
+            ctx.stroke();
+            
+            // 2. Draw baseline price label pill on the left
+            const label = formatCompactCurrency(baselinePrice);
+            ctx.font = '500 10px Outfit';
+            const textWidth = ctx.measureText(label).width;
+            const badgeWidth = textWidth + 8;
+            const badgeHeight = 16;
+            
+            ctx.fillStyle = 'rgba(22, 27, 34, 0.85)';
+            ctx.strokeStyle = 'rgba(139, 148, 158, 0.25)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(chartArea.left - badgeWidth - 4, yPixel - (badgeHeight / 2), badgeWidth, badgeHeight, 4);
+            ctx.fill();
+            ctx.stroke();
+            
+            ctx.fillStyle = '#8b949e';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, chartArea.left - (badgeWidth / 2) - 4, yPixel);
+            
+            // 3. Draw current price highlighted badge on the right
+            const currentPrice = prices[prices.length - 1] || 0;
+            const currentYPixel = yAxis.getPixelForValue(currentPrice);
+            const currentLabel = formatCompactCurrency(currentPrice);
+            
+            ctx.font = 'bold 11px Outfit';
+            const currentTextWidth = ctx.measureText(currentLabel).width;
+            const currentBadgeWidth = currentTextWidth + 10;
+            const currentBadgeHeight = 18;
+            
+            const badgeColor = currentPrice >= baselinePrice ? '#16c784' : '#ea3943';
+            
+            ctx.fillStyle = badgeColor;
+            ctx.beginPath();
+            ctx.roundRect(chartArea.right + 2, currentYPixel - (currentBadgeHeight / 2), currentBadgeWidth, currentBadgeHeight, 4);
+            ctx.fill();
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(currentLabel, chartArea.right + 2 + (currentBadgeWidth / 2), currentYPixel);
+            
+            ctx.restore();
+        }
+    };
     
     mainChart = new Chart(ctx, {
         type: 'line',
@@ -504,18 +606,32 @@ function renderMainChart(chartPoints) {
             datasets: [{
                 label: 'Price (USD)',
                 data: prices,
-                borderColor: '#58a6ff',
-                borderWidth: 2.5,
-                backgroundColor: 'rgba(88, 166, 255, 0.04)',
+                borderColor: function(context) {
+                    const chart = context.chart;
+                    const grads = getChartGradients(chart, baselinePrice);
+                    return grads ? grads.line : '#16c784';
+                },
+                backgroundColor: function(context) {
+                    const chart = context.chart;
+                    const grads = getChartGradients(chart, baselinePrice);
+                    return grads ? grads.fill : 'transparent';
+                },
+                borderWidth: 2,
                 fill: true,
-                tension: 0.1,
+                tension: 0.15,
                 pointRadius: 0,
-                pointHoverRadius: 8
+                pointHoverRadius: 6
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    left: 45, // Add padding to avoid overlapping the left baseline pill
+                    right: 48 // Add padding to avoid overlapping the right price pill
+                }
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -528,19 +644,28 @@ function renderMainChart(chartPoints) {
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(48, 54, 61, 0.2)' },
-                    ticks: { color: '#8b949e', font: { family: 'Outfit' } }
+                    grid: { display: false }, // Hide vertical grid lines
+                    ticks: { 
+                        color: '#8b949e', 
+                        font: { family: 'Outfit', size: 10.5 },
+                        autoSkip: true,
+                        maxTicksLimit: 7 // Avoid overlapping date ticks
+                    }
                 },
                 y: {
-                    grid: { color: 'rgba(48, 54, 61, 0.2)' },
+                    position: 'right', // Place prices on the right side
+                    grid: { color: 'rgba(48, 54, 61, 0.12)' },
                     ticks: {
                         color: '#8b949e',
-                        font: { family: 'Outfit' },
-                        callback: formatCurrency
+                        font: { family: 'Outfit', size: 10.5 },
+                        callback: function(value) {
+                            return formatCompactCurrency(value);
+                        }
                     }
                 }
             }
-        }
+        },
+        plugins: [baselinePlugin]
     });
 }
 
@@ -784,4 +909,14 @@ function formatCompact(value) {
         notation: 'compact',
         compactDisplay: 'short'
     }).format(value);
+}
+
+function formatCompactCurrency(value) {
+    if (value === null || value === undefined) return 'N/A';
+    if (value >= 1000000) {
+        return '$' + (value / 1000000).toFixed(2) + 'M';
+    } else if (value >= 1000) {
+        return '$' + (value / 1000).toFixed(2) + 'K';
+    }
+    return formatCurrency(value);
 }
