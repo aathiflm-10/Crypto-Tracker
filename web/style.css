@@ -451,16 +451,14 @@ body {
     color: #ffffff;
 }
 
-.detail-chart-pane {
+.detail-right-pane {
     display: flex;
     flex-direction: column;
-    height: 100%;
 }
 
 .chart-container {
     position: relative;
-    flex-grow: 1;
-    min-height: 480px;
+    height: 320px;
     width: 100%;
 }
 

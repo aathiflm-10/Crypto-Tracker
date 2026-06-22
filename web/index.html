@@ -135,41 +135,43 @@
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Asset-Specific Subscription Form -->
-                        <div class="coin-stats-card glass-panel">
-                            <h3>Coin Email Alerts</h3>
-                            <p class="card-desc">Subscribe to receive email alerts when this specific asset experiences volatility anomalies.</p>
-                            <form id="subscribe-coin-form" class="admin-form">
-                                <input type="email" id="subscriber-coin-email" placeholder="your.name@gmail.com" required autocomplete="off">
-                                <div class="btn-group">
-                                    <button type="submit" class="admin-btn success-btn">Subscribe</button>
-                                    <button type="button" id="unsubscribe-coin-btn" class="admin-btn danger-btn">Unsubscribe</button>
-                                </div>
-                            </form>
-                            <div class="active-list-container" style="max-height: 90px; margin-top: 10px;">
-                                <ul id="coin-subscribers-list" class="admin-list" style="font-size: 12px;">
-                                    <li>Loading subscribers...</li>
-                                </ul>
-                            </div>
-                        </div>
                     </div>
 
-                    <!-- Right Side: Main Chart Area -->
-                    <div class="detail-chart-pane glass-panel">
-                        <div class="chart-header">
-                            <h2>Historical Performance</h2>
-                            <div class="chart-controls">
-                                <button class="time-filter-btn" data-days="1">24h</button>
-                                <button class="time-filter-btn active" data-days="7">7d</button>
-                                <button class="time-filter-btn" data-days="30">30d</button>
-                            </div>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="priceChart"></canvas>
-                        </div>
-                    </div>
-                </div>
+                    <!-- Right Side: Main Chart Area & Alerts -->
+                    <div class="detail-right-pane">
+                         <div class="detail-chart-pane glass-panel">
+                             <div class="chart-header">
+                                 <h2>Historical Performance</h2>
+                                 <div class="chart-controls">
+                                     <button class="time-filter-btn" data-days="1">24h</button>
+                                     <button class="time-filter-btn active" data-days="7">7d</button>
+                                     <button class="time-filter-btn" data-days="30">30d</button>
+                                 </div>
+                             </div>
+                             <div class="chart-container">
+                                 <canvas id="priceChart"></canvas>
+                             </div>
+                         </div>
+ 
+                         <!-- Asset-Specific Subscription Form (Moved here to optimize layout) -->
+                         <div class="coin-stats-card glass-panel" style="margin-top: 20px;">
+                             <h3>Coin Email Alerts</h3>
+                             <p class="card-desc">Subscribe to receive email alerts when this specific asset experiences volatility anomalies.</p>
+                             <form id="subscribe-coin-form" class="admin-form">
+                                 <input type="email" id="subscriber-coin-email" placeholder="your.name@gmail.com" required autocomplete="off">
+                                 <div class="btn-group">
+                                     <button type="submit" class="admin-btn success-btn">Subscribe</button>
+                                     <button type="button" id="unsubscribe-coin-btn" class="admin-btn danger-btn">Unsubscribe</button>
+                                 </div>
+                             </form>
+                             <div class="active-list-container" style="max-height: 90px; margin-top: 10px;">
+                                 <ul id="coin-subscribers-list" class="admin-list" style="font-size: 12px;">
+                                     <li>Loading subscribers...</li>
+                                 </ul>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
             </div>
 
             <!-- Pipeline Alert Control Center (Always Visible) -->
