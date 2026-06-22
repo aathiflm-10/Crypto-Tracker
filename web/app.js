@@ -7,6 +7,10 @@ let watchlistIds = []; // Active watchlist coin IDs from database
 let mainChart = null; // Chart.js instance for detailed view
 let sparklineCharts = []; // Array of active sparkline Chart instances
 
+// Pagination State
+let currentPage = 1;
+const rowsPerPage = 50;
+
 // API Base URL (blank since frontend is served from root)
 const API_BASE = "";
 
@@ -97,30 +101,44 @@ async function loadMarketDataOnly() {
         if (!response.ok) throw new Error("Failed to fetch market data.");
         marketCoins = await response.json();
         
-        renderMarketTable(marketCoins);
+        const filtered = getFilteredCoinsList();
+        renderMarketTable(filtered);
     } catch (error) {
         console.error("[App] Error loading market data:", error);
     }
 }
 
-// Render market table with sparklines
+// Render market table with sparklines and pagination controls
 function renderMarketTable(coins) {
     // Clean up previous sparkline instances to prevent memory leaks
     destroySparklines();
     
     if (coins.length === 0) {
         marketTableBody.innerHTML = `<tr><td colspan="8" class="no-data">No cryptocurrencies match your search.</td></tr>`;
+        document.getElementById('pagination-info').innerText = 'Showing 0 - 0 of 0';
+        document.getElementById('pagination-controls').innerHTML = '';
         return;
     }
     
-    marketTableBody.innerHTML = coins.map((coin, index) => {
+    // Calculate page counts and slices
+    const totalPages = Math.ceil(coins.length / rowsPerPage) || 1;
+    if (currentPage > totalPages) {
+        currentPage = totalPages;
+    }
+    
+    const startIdx = (currentPage - 1) * rowsPerPage;
+    const endIdx = Math.min(startIdx + rowsPerPage, coins.length);
+    const slicedCoins = coins.slice(startIdx, endIdx);
+    
+    marketTableBody.innerHTML = slicedCoins.map((coin, index) => {
+        const absoluteIndex = startIdx + index + 1;
         const priceChange = coin.price_change_percentage_24h || 0;
         const colorClass = priceChange >= 0 ? 'success-text' : 'danger-text';
         const sign = priceChange >= 0 ? '+' : '';
         
         return `
             <tr data-id="${coin.id}">
-                <td>${coin.market_cap_rank || index + 1}</td>
+                <td>${absoluteIndex}</td>
                 <td>
                     <div class="coin-info-cell">
                         <img class="coin-logo" src="${coin.image}" alt="${coin.name}" loading="lazy">
@@ -149,13 +167,97 @@ function renderMarketTable(coins) {
         });
     });
     
-    // Render sparklines
-    coins.forEach(coin => {
+    // Render sparklines for the sliced page
+    slicedCoins.forEach(coin => {
         const canvas = document.getElementById(`spark-${coin.id}`);
         if (canvas && coin.sparkline_in_7d && coin.sparkline_in_7d.price) {
             renderSparkline(canvas, coin.sparkline_in_7d.price, coin.price_change_percentage_24h || 0);
         }
     });
+    
+    // Render dynamic pagination button layout
+    renderPaginationControls(coins.length, totalPages);
+}
+
+// Render dynamic pagination button layout
+function renderPaginationControls(totalItems, totalPages) {
+    const startIdx = (currentPage - 1) * rowsPerPage;
+    const endIdx = Math.min(startIdx + rowsPerPage, totalItems);
+    
+    document.getElementById('pagination-info').innerText = `Showing ${startIdx + 1} - ${endIdx} out of ${totalItems}`;
+    
+    let controlsHtml = '';
+    // Previous Arrow button
+    controlsHtml += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} id="prev-page-btn">&lt;</button>`;
+    
+    // Dynamic page numbers with smart ellipsis (CMC style)
+    if (totalPages <= 6) {
+        for (let i = 1; i <= totalPages; i++) {
+            controlsHtml += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+        }
+    } else {
+        if (currentPage <= 3) {
+            for (let i = 1; i <= 4; i++) {
+                controlsHtml += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+            }
+            controlsHtml += `<span style="color: var(--text-secondary); margin: 0 4px; font-size: 13px;">...</span>`;
+            controlsHtml += `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`;
+        } else if (currentPage >= totalPages - 2) {
+            controlsHtml += `<button class="page-btn" data-page="1">1</button>`;
+            controlsHtml += `<span style="color: var(--text-secondary); margin: 0 4px; font-size: 13px;">...</span>`;
+            for (let i = totalPages - 3; i <= totalPages; i++) {
+                controlsHtml += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+            }
+        } else {
+            controlsHtml += `<button class="page-btn" data-page="1">1</button>`;
+            controlsHtml += `<span style="color: var(--text-secondary); margin: 0 4px; font-size: 13px;">...</span>`;
+            controlsHtml += `<button class="page-btn" data-page="${currentPage - 1}">${currentPage - 1}</button>`;
+            controlsHtml += `<button class="page-btn active" data-page="${currentPage}">${currentPage}</button>`;
+            controlsHtml += `<button class="page-btn" data-page="${currentPage + 1}">${currentPage + 1}</button>`;
+            controlsHtml += `<span style="color: var(--text-secondary); margin: 0 4px; font-size: 13px;">...</span>`;
+            controlsHtml += `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`;
+        }
+    }
+    
+    // Next Arrow button
+    controlsHtml += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} id="next-page-btn">&gt;</button>`;
+    
+    const container = document.getElementById('pagination-controls');
+    container.innerHTML = controlsHtml;
+    
+    // Bind click handlers to page buttons
+    container.querySelectorAll('.page-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const currentFiltered = getFilteredCoinsList();
+            if (btn.id === 'prev-page-btn') {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderMarketTable(currentFiltered);
+                }
+            } else if (btn.id === 'next-page-btn') {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    renderMarketTable(currentFiltered);
+                }
+            } else {
+                const targetPage = parseInt(btn.dataset.page);
+                if (targetPage && targetPage !== currentPage) {
+                    currentPage = targetPage;
+                    renderMarketTable(currentFiltered);
+                }
+            }
+        });
+    });
+}
+
+// Helper to filter marketCoins list based on search value
+function getFilteredCoinsList() {
+    const query = searchInput.value.toLowerCase().trim();
+    if (!query) return marketCoins;
+    return marketCoins.filter(coin => 
+        coin.name.toLowerCase().includes(query) || 
+        coin.symbol.toLowerCase().includes(query)
+    );
 }
 
 // Render sparkline chart inside table cell
@@ -204,22 +306,15 @@ function destroySparklines() {
 
 // 3. Search and filtering logic
 function handleSearch() {
-    const query = searchInput.value.toLowerCase().trim();
-    if (!query) {
-        renderMarketTable(marketCoins);
-        return;
-    }
-    
-    const filtered = marketCoins.filter(coin => 
-        coin.name.toLowerCase().includes(query) || 
-        coin.symbol.toLowerCase().includes(query)
-    );
+    currentPage = 1; // Reset to page 1 on active search query
+    const filtered = getFilteredCoinsList();
     renderMarketTable(filtered);
 }
 
 // 4. Detail View Navigation & Dynamic Ingestion
 function showExplorerView() {
     currentView = 'explorer';
+    currentPage = 1; // Reset page view
     detailView.style.display = 'none';
     explorerView.style.display = 'block';
     
@@ -228,7 +323,8 @@ function showExplorerView() {
         mainChart = null;
     }
     
-    renderMarketTable(marketCoins);
+    const filtered = getFilteredCoinsList();
+    renderMarketTable(filtered);
 }
 
 async function showDetailView(coinId) {
