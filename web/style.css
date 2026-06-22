@@ -756,3 +756,22 @@ body {
         transform: translateY(0);
     }
 }
+
+/* Real-Time Price Ticking Flash Classes */
+.price-up-flash {
+    animation: flash-green 0.8s ease-out;
+}
+
+.price-down-flash {
+    animation: flash-red 0.8s ease-out;
+}
+
+@keyframes flash-green {
+    0% { color: var(--accent-green); text-shadow: 0 0 8px rgba(63, 185, 80, 0.6); }
+    100% { color: var(--text-primary); text-shadow: none; }
+}
+
+@keyframes flash-red {
+    0% { color: var(--accent-red); text-shadow: 0 0 8px rgba(248, 81, 73, 0.6); }
+    100% { color: var(--text-primary); text-shadow: none; }
+}

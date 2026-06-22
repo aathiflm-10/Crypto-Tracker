@@ -11,6 +11,10 @@ let sparklineCharts = []; // Array of active sparkline Chart instances
 let currentPage = 1;
 const rowsPerPage = 50;
 
+// Live Price Stream State
+let liveSocket = null;
+let lastPrice = null;
+
 // API Base URL (blank since frontend is served from root)
 const API_BASE = "";
 
@@ -318,6 +322,13 @@ function showExplorerView() {
     detailView.style.display = 'none';
     explorerView.style.display = 'block';
     
+    // Close WebSocket connection if active
+    if (liveSocket) {
+        liveSocket.close();
+        liveSocket = null;
+    }
+    lastPrice = null;
+    
     if (mainChart) {
         mainChart.destroy();
         mainChart = null;
@@ -332,6 +343,13 @@ async function showDetailView(coinId) {
     selectedCoinId = coinId;
     explorerView.style.display = 'none';
     detailView.style.display = 'block';
+    
+    // Close existing connection before switching coins
+    if (liveSocket) {
+        liveSocket.close();
+        liveSocket = null;
+    }
+    lastPrice = null;
     
     // Reset subscription form
     subscriberCoinEmail.value = '';
@@ -370,6 +388,9 @@ async function loadDetailDataOnly() {
     
     // Load historical chart data
     loadDetailChart();
+    
+    // Connect to live price socket stream (Binance)
+    connectLivePriceStream(coin.symbol);
 }
 
 // Sync Watchlist Toggle Button State
@@ -397,6 +418,65 @@ async function loadDetailChart() {
     } catch (error) {
         console.error(`[App] Error loading chart for ${selectedCoinId}:`, error);
     }
+}
+
+// Connect to Binance WebSocket for ticking price feed
+function connectLivePriceStream(symbol) {
+    if (liveSocket) {
+        liveSocket.close();
+        liveSocket = null;
+    }
+    
+    // Map ticker symbol directly to Binance USDT pairs (e.g. btc -> btcusdt)
+    const streamSymbol = `${symbol.toLowerCase()}usdt`;
+    const wsUrl = `wss://stream.binance.com:9443/ws/${streamSymbol}@ticker`;
+    
+    liveSocket = new WebSocket(wsUrl);
+    
+    liveSocket.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data && data.c) {
+                const price = parseFloat(data.c);
+                const pct = parseFloat(data.P); // 24h change percent from Binance
+                updateLiveDetailPrice(price, pct);
+            }
+        } catch (e) {
+            console.error("[Live Stream] Error parsing websocket message:", e);
+        }
+    };
+    
+    liveSocket.onerror = (err) => {
+        console.warn(`[Live Stream] WebSocket error for pair ${streamSymbol}:`, err);
+    };
+}
+
+// Update Detail view text elements with ticking transition animations
+function updateLiveDetailPrice(price, pct) {
+    const priceEl = document.getElementById('detail-coin-price');
+    const pctEl = document.getElementById('detail-coin-pct');
+    
+    if (!priceEl || !pctEl) return;
+    
+    // Remove previous transition animations to allow restarts
+    priceEl.classList.remove('price-up-flash', 'price-down-flash');
+    
+    // Trigger layout reflow for animation restart
+    void priceEl.offsetWidth;
+    
+    if (lastPrice !== null) {
+        if (price > lastPrice) {
+            priceEl.classList.add('price-up-flash');
+        } else if (price < lastPrice) {
+            priceEl.classList.add('price-down-flash');
+        }
+    }
+    
+    priceEl.innerText = formatCurrency(price);
+    pctEl.innerText = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+    pctEl.className = `detail-pct-badge ${pct >= 0 ? 'success-btn' : 'danger-btn'}`;
+    
+    lastPrice = price;
 }
 
 function renderMainChart(chartPoints) {
